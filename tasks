@@ -1,0 +1,165 @@
+#!/bin/bash
+
+set -Eeo pipefail
+
+export AWS_DEFAULT_REGION="eu-west-1"
+export project_name="terraform-dojo-codepipeline"
+export TF_VAR_project_name="${project_name}"
+
+
+function func_check_env {
+  if [[ -z "${MY_ENVIRONMENT}" ]]; then
+    echo "Please set MY_ENVIRONMENT"
+    exit 1
+  fi
+  export TF_VAR_environment=${MY_ENVIRONMENT}
+  echo "Running in environment: ${MY_ENVIRONMENT}"
+}
+
+function func_assume_automation_role_idempotent() {
+  if [[ -z "${MY_ENVIRONMENT}" ]]; then
+    echo "Please set MY_ENVIRONMENT"
+    exit 1
+  fi
+
+  current_identity=$(aws sts get-caller-identity --query Arn --output text)
+  if [[ ${current_identity} == *"automation_${MY_ENVIRONMENT}/${MY_ENVIRONMENT}" ]]; then
+    echo "Automation role already assumed"
+  else
+    echo "Assuming automation role"
+
+    account_id=$(aws sts get-caller-identity --query Account --output text)
+    automation_role_arn="arn:aws:iam::${account_id}:role/automation_${MY_ENVIRONMENT}"
+    automation_role_creds=$(aws sts assume-role --role-arn ${automation_role_arn} --role-session-name ${MY_ENVIRONMENT})
+    export AWS_ACCESS_KEY_ID=`echo "${automation_role_creds}" | jq -r '.Credentials.AccessKeyId'`
+    export AWS_SECRET_ACCESS_KEY=`echo "${automation_role_creds}" | jq -r '.Credentials.SecretAccessKey'`
+    export AWS_SESSION_TOKEN=`echo "${automation_role_creds}" | jq -r '.Credentials.SessionToken'`
+
+    current_identity=$(aws sts get-caller-identity --query Arn --output text)
+    echo "Current role is: $current_identity"
+  fi
+}
+
+function func_tf_init() {
+  account_id=$(aws sts get-caller-identity --query Account --output text)
+  bucket="${project_name}-terraform-states-${account_id}"
+  terraform init --reconfigure --backend-config bucket=${bucket} --backend-config key=${MY_ENVIRONMENT}/${project_name}-${MY_ENVIRONMENT}.tfstate --backend-config region=${AWS_DEFAULT_REGION} --backend-config dynamodb_table="${project_name}-terraform-lock"
+}
+
+command="$1"
+case "${command}" in
+  _setup_backend)
+      destroy=$2
+      set -x
+      cd terraform_backend/
+      terraform init --reconfigure
+      if [[ "${destroy}" == "destroy" ]]; then
+        echo "Destroying Terraform backend"
+        terraform plan -out setup.tfplan -destroy
+      else
+        echo "Creating Terraform backend"
+        terraform plan -out setup.tfplan
+      fi
+      terraform apply setup.tfplan
+      set +x
+      ;;
+  setup_backend)
+      destroy=$2
+      dojo "./tasks _setup_backend ${destroy}"
+      ;;
+  _setup_cicd)
+      destroy=$2
+      set -x
+      bucket=$(cat terraform_backend/terraform_states_s3_bucket_name.txt)
+      if [[ -z "${bucket}" ]]; then
+        echo "bucket name could not be set"
+        exit 1
+      fi
+      cd cicd/terraform-pipeline/
+
+      terraform init --reconfigure --backend-config bucket=${bucket} --backend-config key=${project_name}-cicd.tfstate --backend-config region=${AWS_DEFAULT_REGION} --backend-config dynamodb_table="${project_name}-terraform-lock"
+      if [[ "${destroy}" == "destroy" ]]; then
+        echo "Destroying CICD pipeline"
+        terraform plan -out cicd.tfplan -destroy
+      else
+        echo "Creating CICD pipeline"
+        terraform plan -out cicd.tfplan
+      fi
+      terraform apply cicd.tfplan
+      set +x
+      ;;
+  setup_cicd)
+      destroy=$2
+      dojo "./tasks _setup_cicd ${destroy}"
+      ;;
+  _tf_lint)
+      set -x
+      cd terraform/
+      terraform init --backend=false
+      terraform validate
+      terraform fmt -check -recursive
+      set +x
+      ;;
+  tf_lint)
+      dojo "./tasks _tf_lint"
+      ;;
+  checkov)
+      set -x
+      docker run -t --entrypoint=bash --rm -v ${PWD}:/tmp/code bridgecrew/checkov:2.0.569 -c "checkov -d /tmp/code/terraform"
+      set +x
+      ;;
+  _tf_plan)
+      destroy=$2
+      func_check_env
+      set -x
+      cd terraform/
+      func_tf_init
+      if [[ "${destroy}" == "destroy" ]]; then
+        echo "Destroying main infrastructure"
+        terraform plan -out ${project_name}-${MY_ENVIRONMENT}.tfplan -var-file ${MY_ENVIRONMENT}.tfvars -destroy
+      else
+        echo "Creating main infrastructure"
+        terraform plan -out ${project_name}-${MY_ENVIRONMENT}.tfplan -var-file ${MY_ENVIRONMENT}.tfvars
+      fi
+      set +x
+      ;;
+  tf_plan)
+      destroy=$2
+      func_assume_automation_role_idempotent
+      dojo "./tasks _tf_plan ${destroy}"
+      ;;
+  _tf_apply)
+      func_check_env
+      set -x
+      cd terraform/
+      func_tf_init
+      terraform apply ${project_name}-${MY_ENVIRONMENT}.tfplan
+      set +x
+      ;;
+  tf_apply)
+      func_assume_automation_role_idempotent
+      dojo "./tasks _tf_apply"
+      ;;
+  _test)
+      func_check_env
+      set -x
+      account_id=$(aws sts get-caller-identity --query Account --output text)
+      aws s3 ls | grep ${project_name}-${account_id}-${MY_ENVIRONMENT} || { echo "Failed"; exit 1; }
+      echo "Success"
+      set +x
+      ;;
+  test)
+      func_assume_automation_role_idempotent
+      dojo "./tasks _test"
+      ;;
+  zip)
+      zipfile="terraform-dojo-codepipeline.zip"
+      [ -f "${zipfile}" ] && rm "${zipfile}"
+      zip -r "${zipfile}"  ./ -x *.tfstate* *.tfplan "*/.DS_Store" "./.DS_Store" "*/.terraform.lock.hcl" "./*.zip" "*-old/*" "./.git/*" "*/.terraform/*"
+      ;;
+  *)
+      echo "Invalid command: '${command}'"
+      exit 1
+      ;;
+esac
+set +e

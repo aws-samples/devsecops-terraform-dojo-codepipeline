@@ -1,0 +1,31 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      # install Dojo
+      - version="0.10.3"
+      - wget -O /tmp/dojo https://github.com/kudulab/dojo/releases/download/${version}/dojo_linux_amd64
+      - chmod +x /tmp/dojo
+      - mv /tmp/dojo /usr/bin/dojo
+      - dojo --version
+
+      # make the current directory (the git cloned repository)
+      # owned by codebuild-user
+      - chown -R codebuild-user:codebuild-user ${PWD}
+
+      # enable codebuild-user to run docker commands
+      - mkdir -p /home/codebuild-user
+      - chown -R codebuild-user:codebuild-user /home/codebuild-user
+      - chown codebuild-user /var/run/docker.sock
+  build:
+    # https://github.com/aws/aws-codebuild-docker-images/blob/master/ubuntu/standard/5.0/Dockerfile#L56
+    run-as: codebuild-user
+    commands:
+      # get artifacts
+      - bash -c 'if [[ "${MY_ENVIRONMENT}" == "testing" ]]; then set -x; cp $CODEBUILD_SRC_DIR_TestingTerraformPlan_output/terraform/*.tfplan $CODEBUILD_SRC_DIR/terraform/; set +x; fi'
+      - bash -c 'if [[ "${MY_ENVIRONMENT}" == "production" ]]; then set -x; cp $CODEBUILD_SRC_DIR_ProductionTerraformPlan_output/terraform/*.tfplan $CODEBUILD_SRC_DIR/terraform/; set +x; fi'
+      - ls -la
+      - ls -la terraform/
+
+      - ./tasks tf_apply

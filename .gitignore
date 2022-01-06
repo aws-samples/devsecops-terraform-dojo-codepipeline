@@ -1,0 +1,12 @@
+.terraform
+*.tfstate
+*.tfplan
+.terraform.lock.hcl
+.terraform.tfstate.lock.info
+*.terraform*old
+
+*.backup
+.DS_Store
+*.txt
+.gitconfig
+*.zip
