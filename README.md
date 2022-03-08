@@ -221,7 +221,7 @@ Please install these first:
 * [AWS CLI](https://aws.amazon.com/cli/)
 * and
   * either [Terraform](https://www.terraform.io/)
-  * or [Docker](https://www.docker.com/) and [Dojo](https://github.com/kudulab/dojo#installation))
+  * or [Docker](https://www.docker.com/) and [Dojo](https://github.com/kudulab/dojo#installation)
 
 ### Steps Overview
 The process of deploying this solution involves these steps:
@@ -287,7 +287,7 @@ The process of deploying this solution involves these steps:
     ```
     * This step will run `terraform plan` and `terraform apply` commands. If you need to review the `terraform plan` output first, you may want to run the commands manually, please see the [tasks](tasks) file for the specific commands. When running the commands manually, please remember to export the same environment variables as set in the [tasks](tasks) file.
     * This step uses the remote S3 Terraform backend. The state is saved in the S3 bucket created in step 3.
-    * This step will create an AWS CodePipeline pipeline, together with all the other necessary AWS resources (such as: an S3 bucket for pipeline artifacts, and AWS CodeBuild projects). It will also create the 2 IAM Roles, described under [Least privilege principle](#Least privilege principle).
+    * This step will create an AWS CodePipeline pipeline, together with all the other necessary AWS resources (such as: an S3 bucket for pipeline artifacts, and AWS CodeBuild projects). It will also create the 2 IAM Roles, described under [Least privilege principle](#Least-privilege-principle).
 5. Deploy the main infrastructure code (using [terraform/](terraform/) directory).
     * All the steps here are run automatically by a CICD pipeline. You don't need to do anything. The CICD pipeline will be triggered automatically as soon as it was created and also on git push events. You may also trigger the CICD pipeline manually.
     * You may choose to run these commands locally (in addition to them being run already in a CICD pipeline):
