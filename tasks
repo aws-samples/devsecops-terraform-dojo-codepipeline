@@ -144,8 +144,40 @@ case "${command}" in
       func_check_env
       set -x
       account_id=$(aws sts get-caller-identity --query Account --output text)
-      aws s3 ls | grep ${project_name}-${account_id}-${MY_ENVIRONMENT} || { echo "Failed"; exit 1; }
-      echo "Success"
+      aws s3 ls | grep ${project_name}-${account_id}-${MY_ENVIRONMENT} || { echo "Test 1: Failed"; exit 1; }
+      echo "Test 1: Success"
+
+      kms_key_id_testing=$(aws kms list-aliases | jq -r '.[][] | select(.AliasName == "alias/terraform-dojo-codepipeline-testing").TargetKeyId')
+      kms_key_id_production=$(aws kms list-aliases | jq -r '.[][] | select(.AliasName == "alias/terraform-dojo-codepipeline-production").TargetKeyId')
+
+      if [[ "$MY_ENVIRONMENT" == "testing" ]]; then
+          # verify that when running in testing environment
+          # we can edit testing resources
+          # and we cannot edit production resources
+
+          aws kms tag-resource \
+            --key-id ${kms_key_id_testing} \
+            --tags TagKey='acceptanceTest',TagValue='123'
+          aws kms untag-resource \
+            --key-id ${kms_key_id_testing} \
+            --tag-key 'acceptanceTest'
+          echo "Test 2: Success"
+
+
+          set +e
+          aws kms tag-resource \
+            --key-id ${kms_key_id_production} \
+            --tags TagKey='acceptanceTest',TagValue='123'
+          if [[ $? == 0 ]]; then
+            echo "Test 3: Failed. Expected not to be able to modify production AWS resources while running in testing environment"
+            aws kms untag-resource \
+              --key-id ${kms_key_id_production} \
+              --tag-key 'acceptanceTest'
+            set -e
+            exit 1
+          fi
+          echo "Test 3: Success"
+      fi
       set +x
       ;;
   test)
