@@ -62,10 +62,9 @@ resource "aws_iam_policy" "automation_testing_limit" {
 EOF
 }
 
-resource "aws_iam_policy_attachment" "automation_testing_limit" {
-  name       = "automation_testing_limit"
-  roles      = [aws_iam_role.automation_testing.name]
+resource "aws_iam_role_policy_attachment" "automation_testing_limit" {
   policy_arn = aws_iam_policy.automation_testing_limit.arn
+  role       = aws_iam_role.automation_testing.name
 }
 
 
@@ -118,8 +117,8 @@ resource "aws_iam_policy" "automation_production_limit" {
 EOF
 }
 
-resource "aws_iam_policy_attachment" "automation_production_limit" {
-  name       = "automation_production_limit"
-  roles      = [aws_iam_role.automation_production.name]
+
+resource "aws_iam_role_policy_attachment" "automation_production_limit" {
   policy_arn = aws_iam_policy.automation_production_limit.arn
+  role       = aws_iam_role.automation_production.name
 }
