@@ -221,7 +221,7 @@ Please install these first:
 * [AWS CLI](https://aws.amazon.com/cli/)
 * and
   * either [Terraform](https://www.terraform.io/)
-  * or [Docker](https://www.docker.com/) and [Dojo](https://github.com/kudulab/dojo#installation))
+  * or [Docker](https://www.docker.com/) and [Dojo](https://github.com/kudulab/dojo#installation)
 
 ### Steps Overview
 The process of deploying this solution involves these steps:
@@ -287,7 +287,7 @@ The process of deploying this solution involves these steps:
     ```
     * This step will run `terraform plan` and `terraform apply` commands. If you need to review the `terraform plan` output first, you may want to run the commands manually, please see the [tasks](tasks) file for the specific commands. When running the commands manually, please remember to export the same environment variables as set in the [tasks](tasks) file.
     * This step uses the remote S3 Terraform backend. The state is saved in the S3 bucket created in step 3.
-    * This step will create an AWS CodePipeline pipeline, together with all the other necessary AWS resources (such as: an S3 bucket for pipeline artifacts, and AWS CodeBuild projects). It will also create the 2 IAM Roles, described under [Least privilege principle](#Least privilege principle).
+    * This step will create an AWS CodePipeline pipeline, together with all the other necessary AWS resources (such as: an S3 bucket for pipeline artifacts, and AWS CodeBuild projects). It will also create the 2 IAM Roles, described under [Least privilege principle](#Least-privilege-principle).
 5. Deploy the main infrastructure code (using [terraform/](terraform/) directory).
     * All the steps here are run automatically by a CICD pipeline. You don't need to do anything. The CICD pipeline will be triggered automatically as soon as it was created and also on git push events. You may also trigger the CICD pipeline manually.
     * You may choose to run these commands locally (in addition to them being run already in a CICD pipeline):
@@ -404,6 +404,48 @@ Dockerfile for terraform-dojo Docker image is available [here](https://github.co
 2. Running this command:
 ```
 ./tasks build_local
+```
+
+##### Amazon ECR suggestions
+If you are using Amazon ECR, you will need to add IAM permissions for CodeBuild to pull Docker images from Amazon ECR. Please add the following into [cicd/terraform-pipeline/codebuild.tf](cicd/terraform-pipeline/codebuild.tf)
+
+```
+# Allow CodeBuild to run `aws ecr get-login-password` which is needed
+# when CodeBuild needs to pull Docker images from Amazon ECR
+resource "aws_iam_role_policy" "codebuild_policy_allow_ecr" {
+  name = "${var.project_name}-codebuild-policy-allow-ecr"
+  role = aws_iam_role.codebuild_assume_role.id
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Resource": [
+        "*"
+      ],
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer"
+      ]
+    }
+  ]
+}
+EOF
+}
+```
+
+You would also have to edit the buildspec files. In each of them, please add 2 lines after the `commands` directive. The example for `buildspec_checkov.yml` would be as following. Please replace `<AWS-Account-ID>` with the AWS Account ID in which you store the ECR Docker image.
+
+```
+commands:
+  # without the following line, HOME is set to /root and
+  # therefore, `docker login` command fails
+  - export HOME=/home/codebuild-user
+  - aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin <AWS-Account-ID>.dkr.ecr.eu-west-1.amazonaws.com
+  - ./tasks checkov
 ```
 
 ## Ideas to extend this solution
