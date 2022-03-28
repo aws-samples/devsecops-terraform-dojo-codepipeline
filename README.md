@@ -108,12 +108,19 @@ There are 2 IAM roles provided:
 
 The roles are supposed to be assumed by an actor (either a human or CICD server) performing a deployment. The `automation_testing` role is to be assumed when deployment targets the testing environment, and `automation_production` - when the deployment targets production environment.
 
-Both roles provide read only access to the AWS services, by utilizing the [`SecurityAudit`](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html#jf_security-auditor) [AWS Managed Policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_managed-vs-inline.html). Furthermore, the `automation_testing` role prevents write access to AWS resources which are tagged as `environment=production`. Similarly, `automation_production` role allows write access to AWS resources tagged as `environment=testing`. This is implemented in the following way:
+Both roles provide read only access to the AWS services, by utilizing the [`SecurityAudit`](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html#jf_security-auditor) [AWS Managed Policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_managed-vs-inline.html). Furthermore, the `automation_testing` role allows write access to AWS resources which are tagged as `environment=testing`. Similarly, `automation_production` role allows write access to AWS resources tagged as `environment=production`. This is implemented in the following way:
 ```
-"Condition": {
-  "StringNotLike": {
-      "aws:ResourceTag/environment": [ "production" ]
-  }
+"Statement": [
+{
+      "Sid": "AllowOnlyForChosenEnvironment",
+      "Effect": "Allow",
+      "Action": [ "*" ],
+      "Resource": "*",
+      "Condition": {
+          "StringNotLike": {
+              "aws:ResourceTag/environment": [ "production" ]
+          }
+      }
 }
 ```
 in [cicd/terraform-pipeline/tf_iam_roles.tf](cicd/terraform-pipeline/tf_iam_roles.tf). For more information please read [IAM UserGuide](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_tags.html#access_tags_control-resources)
