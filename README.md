@@ -463,7 +463,7 @@ commands:
 * add more tests, using some test framework
 * add additional action in the pipeline stages: testing and production to check that running `terraform plan` after `terraform apply` was already finished would not try show any changes. The expected output from `terraform plan` would contain the "No changes" string, like in the picture below:
 
-![](img/tf-plan-no-changes.png)
+![](docs/img/tf-plan-no-changes.png)
 
 
 ## References
